@@ -1,95 +1,111 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+import { Avatar, Box, Button, List, ListItem, ListItemText, Stack, TextField } from '@mui/material';
+import { useState, useEffect, useRef } from 'react';
 
 export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [chatHistory, setChatHistory] = useState<Array<{ sender: string; text: string }>>([]);
+  const [inputText, setInputText] = useState<string>('');
+  const [isAiThinking, setAiThinking] = useState(false);
+  const chatHistoryRef = useRef<HTMLElement>(null);
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+  const handleSubmit = async () => {
+    if (!inputText) return;
+
+    // 添加用户消息
+    setChatHistory(prev => [...prev, { sender: 'user', text: inputText }]);
+    setInputText('');
+    setAiThinking(true);
+
+    try {
+      // 调用 API 路由
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: inputText }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch AI response');
+      }
+
+      const data = await response.json();
+      setChatHistory(prev => [...prev, { sender: 'assistant', text: data.text }]);
+    } catch (error) {
+      console.error('Error:', error);
+      setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Sorry, something went wrong.' }]);
+    } finally {
+      setAiThinking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (chatHistoryRef.current) {
+      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+    }
+  }, [chatHistory]);
+
+  return (
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ padding: '16px', borderBottom: '1px solid #e0e0e0' }}>与 AI 聊天</Box>
+      <Box ref={chatHistoryRef} sx={{ flex: 1, overflow: 'auto' }}>
+        <List>
+          {chatHistory.map((message, index) => (
+            <ListItem key={index} sx={{ justifyContent: message.sender === 'user' ? 'flex-end' : 'flex-start' }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexDirection: message.sender === 'user' ? 'row-reverse' : 'row' }}
+              >
+                <Avatar sx={{ bgcolor: message.sender === 'user' ? '#1976d2' : '#d81b60' }}>
+                  {message.sender === 'user' ? 'U' : 'A'}
+                </Avatar>
+                <ListItemText
+                  primary={message.text}
+                  sx={{
+                    background: message.sender === 'user' ? '#e0e0e0' : '#f5f5f5',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    maxWidth: '70%',
+                  }}
+                />
+              </Stack>
+            </ListItem>
+          ))}
+          {isAiThinking && (
+            <ListItem sx={{ justifyContent: 'flex-start' }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Avatar sx={{ bgcolor: '#d81b60' }}>A</Avatar>
+                <ListItemText
+                  primary="AI 正在思考..."
+                  sx={{ background: '#f5f5f5', padding: '8px', borderRadius: '8px', maxWidth: '70%' }}
+                />
+              </Stack>
+            </ListItem>
+          )}
+        </List>
+      </Box>
+      <Stack direction="row" spacing={1} sx={{ padding: '16px' }}>
+        <TextField
+          value={inputText}
+          multiline
+          minRows={1}
+          maxRows={4}
+          variant="outlined"
+          fullWidth
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
+          sx={{ flex: 1 }}
+          placeholder="输入你的消息..."
+          onChange={e => setInputText(e.target.value)}
+        />
+        <Button variant="contained" onClick={handleSubmit}>发送</Button>
+      </Stack>
+    </Box>
   );
 }

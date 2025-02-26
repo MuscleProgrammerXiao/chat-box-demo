@@ -9,37 +9,65 @@ export default function Home() {
   const chatHistoryRef = useRef<HTMLElement>(null);
 
   const handleSubmit = async () => {
-    if (!inputText) return;
-
-    // 添加用户消息
-    setChatHistory(prev => [...prev, { sender: 'user', text: inputText }]);
+    if (!inputText || isAiThinking) return;
+  
+    // 创建临时历史副本（避免状态更新延迟问题）
+    const tempHistory = [...chatHistory, { sender: 'user', text: inputText }];
+    setChatHistory(tempHistory);
     setInputText('');
     setAiThinking(true);
-
+  
     try {
-      // 调用 API 路由
-      const response = await fetch('/api/chat', {
+      const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer sk-wvfqxsgomujqhzlqqfeuswgxtadukxtilygrihzmrbnvxscs',
+          'HTTP-Referer': 'http://localhost:3000',
+          'X-Title': 'My Chat App',
         },
-        body: JSON.stringify({ message: inputText }),
+        body: JSON.stringify({
+          "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+          "messages": [
+            {
+              role: "system",
+              content: "你是一个专业的AI助手，请用中文进行自然流畅的多轮对话"
+            },
+            ...tempHistory
+              .slice(-4) // 保留最近3轮对话+当前消息（根据模型token限制调整）
+              .map(msg => ({
+                role: msg.sender === 'user' ? 'user' : 'assistant',
+                content: msg.text
+              })),
+            { role: 'user', content: inputText }
+          ],
+          "stream": false,
+          "max_tokens": 512,
+          "temperature": 0.7
+        }),
       });
-
+  
       if (!response.ok) {
-        throw new Error('Failed to fetch AI response');
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'API请求失败');
       }
-
+  
       const data = await response.json();
-      setChatHistory(prev => [...prev, { sender: 'assistant', text: data.text }]);
+      const aiResponse = data.choices?.[0]?.message?.content || '无法生成回复';
+      
+      // 更新历史时需要包含AI的回复
+      setChatHistory(prev => [...prev, { sender: 'assistant', text: aiResponse }]);
     } catch (error) {
       console.error('Error:', error);
-      setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Sorry, something went wrong.' }]);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      setChatHistory(prev => [...prev, {
+        sender: 'assistant',
+        text: `出错啦: ${errorMessage}`
+      }]);
     } finally {
       setAiThinking(false);
     }
   };
-
   useEffect(() => {
     if (chatHistoryRef.current) {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
